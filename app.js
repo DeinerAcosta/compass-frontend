@@ -115,10 +115,13 @@ async function doRegister(){
   const name = document.getElementById('reg-name')?.value.trim();
   const email = document.getElementById('reg-email')?.value.trim().toLowerCase();
   const pass = document.getElementById('reg-pass')?.value;
-  const proceso = document.getElementById('reg-proceso')?.value || "General";
+  // El ID del select de procesos debe coincidir exactamente
+  const proceso = document.getElementById('reg-proceso')?.value || "General"; 
 
+  // Si alguno de estos falla, sale el mensaje rojo de la imagen
   if(!name || !email || !pass) {
-      showErr('Por favor llena todos los campos obligatorios.'); return;
+      showErr('Por favor llena todos los campos obligatorios.'); 
+      return;
   }
 
   try {
