@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COMPASS · Clínica Oftalmológica Internacional</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300;1,9..144,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══ AUTH SCREEN ═══ -->
+<div id="auth-screen">
+  <div class="auth-bg"></div>
+  <div class="auth-grid-pattern"></div>
+
+  <div class="auth-left">
+    <div class="auth-eyebrow">
+      <div class="auth-eyebrow-dot"></div>
+      Clínica Oftalmológica Internacional
+    </div>
+    <h1 class="auth-headline">
+      Compromisos que<br><em>se cumplen.</em>
+    </h1>
+    <p class="auth-desc">COMPASS es la plataforma de planeación operativa de la Clínica Oftalmológica Internacional. Cada líder registra sus compromisos, indicadores y seguimiento — por año, en una sola página.</p>
+    <div class="auth-features">
+      <div class="auth-feat"><div class="auth-feat-icon">📅</div>Historial multi-año — compara ciclos de planeación</div>
+      <div class="auth-feat"><div class="auth-feat-icon">🔒</div>Borradores privados por usuario</div>
+      <div class="auth-feat"><div class="auth-feat-icon">📊</div>Dashboard por objetivos BSC en tiempo real</div>
+      <div class="auth-feat"><div class="auth-feat-icon">⚡</div>Formato COMPASS en 5 minutos</div>
+    </div>
+  </div>
+
+  <div class="auth-right">
+    <div class="auth-card">
+      <div class="auth-card-logo">COMPASS</div>
+      <div class="auth-card-sub">Plataforma de Planeación Operativa · COI</div>
+      <div class="auth-tabs">
+        <button class="auth-tab-btn on" id="tab-login" onclick="switchAuthTab('login')">Iniciar sesión</button>
+        <button class="auth-tab-btn" id="tab-reg" onclick="switchAuthTab('register')">Registrarse</button>
+      </div>
+      <div id="auth-err" class="auth-err" style="display:none"></div>
+
+      <div id="login-form">
+        <div class="field" style="margin-bottom:12px"><label>Correo institucional</label><input type="email" id="li-email" placeholder="usuario@viu.com.co" autocomplete="email"></div>
+        <div class="field" style="margin-bottom:18px"><label>Contraseña</label><input type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password"></div>
+        <button class="btn btn-primary btn-w" onclick="doLogin()">Ingresar <span>→</span></button>
+      </div>
+
+      <div id="reg-form" style="display:none">
+        <div class="grid-2" style="margin-bottom:12px">
+          <div class="field"><label>Nombre completo</label><input type="text" id="rg-name" placeholder="Tu nombre"></div>
+          <div class="field"><label>Proceso / Área</label><input type="text" id="rg-proc" placeholder="Ej: Glaucoma"></div>
+        </div>
+        <div class="field" style="margin-bottom:12px"><label>Correo institucional</label><input type="email" id="rg-email" placeholder="usuario@viu.com.co"></div>
+        <div class="field" style="margin-bottom:18px"><label>Contraseña</label><input type="password" id="rg-pass" placeholder="Mínimo 6 caracteres"></div>
+        <button class="btn btn-primary btn-w" onclick="doRegister()">Crear cuenta <span>→</span></button>
+      </div>
+
+      <!-- Eliminamos los botones de Demo Login, ahora usaremos el login real conectado a la BD -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app-wrap">
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="sb-top">
+      <div class="sb-brand">
+        <div class="sb-logo">C</div>
+        <div class="sb-brand-text">
+          <div class="sb-brand-name">COMPASS</div>
+          <div class="sb-brand-sub">Planeación COI</div>
+        </div>
+      </div>
+
+      <!-- Year selector -->
+      <div class="sb-year-wrap">
+        <div class="sb-year-label">Historial de planeación</div>
+        <div class="year-selector" id="year-selector"></div>
+        <button class="year-add-btn" onclick="addYear()">+ Agregar año</button>
+      </div>
+    </div>
+
+    <div class="sb-nav">
+      <div class="sb-nav-section" id="nav-user-section">
+        <div class="sb-nav-label">Mi espacio</div>
+        <button class="sb-nav-item" data-view="home" onclick="setView('home')"><span class="sb-nav-icon">🏠</span>Inicio</button>
+        <button class="sb-nav-item" data-view="form" onclick="startNew()"><span class="sb-nav-icon">✏️</span>Nuevo formato</button>
+        <button class="sb-nav-item" data-view="history" onclick="setView('history')"><span class="sb-nav-icon">📅</span>Mi historial</button>
+      </div>
+      <div class="sb-nav-section" id="nav-admin-section" style="display:none">
+        <div class="sb-nav-label">Administración</div>
+        <button class="sb-nav-item admin-item" data-view="admin-sent" onclick="setAdminTab('sent')"><span class="sb-nav-icon">✅</span>Formatos enviados <span class="sb-nav-badge" id="sent-count">0</span></button>
+        <button class="sb-nav-item admin-item" data-view="admin-bsc" onclick="setAdminTab('bsc')"><span class="sb-nav-icon">📊</span>Dashboard BSC</button>
+        <button class="sb-nav-item admin-item" data-view="admin-users" onclick="setAdminTab('users')"><span class="sb-nav-icon">👥</span>Usuarios</button>
+        <button class="sb-nav-item admin-item" data-view="admin-years" onclick="setAdminTab('years')"><span class="sb-nav-icon">🗂️</span>Gestión de años</button>
+      </div>
+    </div>
+
+    <div class="sb-bottom">
+      <div class="sb-user">
+        <div class="sb-avatar" id="sb-avatar"></div>
+        <div>
+          <div class="sb-user-name" id="sb-uname"></div>
+          <div class="sb-user-role" id="sb-urole"></div>
+        </div>
+      </div>
+      <button class="sb-logout" onclick="doLogout()"><span>←</span> Cerrar sesión</button>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <div id="content"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"><div class="toast-icon">✓</div><span id="toast-msg"></span></div>
+
+<script src="app.js"></script>
+</body>
+</html>
