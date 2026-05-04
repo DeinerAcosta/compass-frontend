@@ -2,7 +2,7 @@
    CONSTANTS & CONFIG
 ════════════════════════════════════════ */
 // Debe tener la S después de http
-const API_URL = "https://tu-app-en-render.onrender.com/api";
+const API_URL = "https://compass-backend-3f4z.onrender.com/api";
 const BSC = [
   {code:"4.1",label:"Garantizar el crecimiento corporativo",axis:"Financiera",color:"#0F7A62",bg:"#E3F9F5"},
   {code:"4.2",label:"Generar valor a los accionistas",axis:"Financiera",color:"#0F7A62",bg:"#E3F9F5"},
