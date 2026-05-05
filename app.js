@@ -24,8 +24,8 @@ const AXES = [
   {name:"Procesos",codes:["2.1","2.2","2.3"],color:"#9A5C0A"},
   {name:"Aprendizaje",codes:["1.1","1.2","1.3","1.4","1.5"],color:"#5B21B6"},
 ];
-const MKTS = ["COI Electivo — Particulares / Prepagadas","FOCA — EPS (planes obligatorios)","Ambos mercados (COI + FOCA)"];
-const PROCS = ["Gerencia","Dirección Científica","Comercial y Mercadeo","Facturación y Cartera","Logística y Compras","Servicio al Cliente (SIAU)","Cirugía","Seguridad del Paciente","Banco de Tejidos","Talento Humano","SST","TSI","Proyectos","Sala Azul","Investigación (CIRVO)","Glaucoma","Retina","Segmento Anterior","Oculoplástica","Pediatría","Cartagena","Santa Marta","Valledupar","Riohacha","Otro"];
+const MKTS = ["COI Electivo — Particulares / Prepagadas","FOCA — EPS (planes obligatorios)","Ambos mercados (VIU + FOCA)"];
+const PROCS = ["Gerencia","Dirección Científica","Comercial y Mercadeo","Facturación y Cartera","Logística",  "Compras","Servicio al Cliente (SIAU)","Cirugía","Seguridad del Paciente","Banco de Tejidos","Talento Humano","SST","TSI","Proyectos","Sala Azul","Investigación (CIRVO)","Glaucoma","Retina","Segmento Anterior","Oculoplástica","Pediatría","Cartagena","Santa Marta","Valledupar","Riohacha","Otro"];
 const CY = new Date().getFullYear();
 
 /* ════════════════════════════════════════
@@ -54,14 +54,11 @@ async function loadDB(){
     const resUsers = await fetch(`${API_URL}/users`);
     if(resUsers.ok) DB.users = await resUsers.json();
 
-    // --- AGREGA ESTO AQUÍ ---
     const resYears = await fetch(`${API_URL}/years`);
     if(resYears.ok) {
         const yearsData = await resYears.json();
         if(yearsData.length > 0) DB.years = yearsData;
     }
-    // ------------------------
-
   } catch(e) {
     console.error("No se pudo cargar la base de datos", e);
   }
@@ -69,7 +66,7 @@ async function loadDB(){
 }
 
 /* ════════════════════════════════════════
-   AUTH (Conectado a FastAPI)
+   AUTH (Conectado a FastAPI + LocalStorage)
 ════════════════════════════════════════ */
 function switchAuthTab(t){
   document.getElementById('tab-login').classList.toggle('on',t==='login');
@@ -115,10 +112,8 @@ async function doRegister(){
   const name = document.getElementById('reg-name')?.value.trim();
   const email = document.getElementById('reg-email')?.value.trim().toLowerCase();
   const pass = document.getElementById('reg-pass')?.value;
-  // El ID del select de procesos debe coincidir exactamente
   const proceso = document.getElementById('reg-proceso')?.value || "General"; 
 
-  // Si alguno de estos falla, sale el mensaje rojo de la imagen
   if(!name || !email || !pass) {
       showErr('Por favor llena todos los campos obligatorios.'); 
       return;
@@ -136,17 +131,15 @@ async function doRegister(){
         showErr(err.detail || 'Error al registrar el usuario.'); return;
     }
     
-    // Si todo sale bien, damos feedback visual positivo
     const errBox = document.getElementById('auth-err');
     errBox.textContent = '¡Registro exitoso! Ahora puedes iniciar sesión.';
     errBox.style.display = 'block';
-    errBox.style.color = "#10B981"; // Texto verde
-    errBox.style.backgroundColor = "#D1FAE5"; // Fondo verde claro
+    errBox.style.color = "#10B981"; 
+    errBox.style.backgroundColor = "#D1FAE5"; 
     errBox.style.border = "1px solid #10B981";
     
-    // Lo enviamos a la pestaña de login después de 2 segundos
     setTimeout(() => {
-        errBox.style.color = "#DC2626"; // Regresamos al estilo de error normal
+        errBox.style.color = "#DC2626"; 
         errBox.style.backgroundColor = "#FEF2F2";
         errBox.style.border = "1px solid #FECACA";
         errBox.style.display = 'none';
@@ -160,6 +153,8 @@ async function doRegister(){
 
 function loginUser(u){
   CU = u;
+  // Guardamos la sesión en el navegador
+  localStorage.setItem('compass_user', JSON.stringify(u));
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app-wrap').classList.add('visible');
   setupSidebar();
@@ -168,6 +163,8 @@ function loginUser(u){
 
 function doLogout(){
   CU = null; editId = null; selId = null;
+  // Borramos la sesión al salir
+  localStorage.removeItem('compass_user');
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('app-wrap').classList.remove('visible');
   document.getElementById('li-pass').value = '';
@@ -201,14 +198,7 @@ function renderYearSelector(){
   }).join('');
 }
 function selectYear(y){ selYear=y; renderYearSelector(); render(); }
-function addYear(){
-  const chosen = prompt('Ingresa el año que deseas agregar:\n(Rango sugerido: ' + CY + '–' + (CY+3) + ')');
-  if(!chosen) return;
-  const y = parseInt(chosen.trim());
-  if(isNaN(y)||y<2020||y>2040){ showToast('Año inválido. Debe estar entre 2020 y 2040.'); return; }
-  if(!DB.years.includes(y)){ DB.years.push(y); DB.years.sort((a,b)=>b-a); }
-  renderYearSelector(); showToast('Año '+y+' agregado al selector');
-}
+
 function updateSentCount(){
   const el = document.getElementById('sent-count');
   if(el) el.textContent = sentForms().length;
@@ -225,7 +215,8 @@ function updateNavHighlight(){
 ════════════════════════════════════════ */
 function formsForYear(y){ return Object.values(DB.forms).filter(f=>f.year===y); }
 function myForms(){ return formsForYear(selYear).filter(f=>f.email===CU.email).sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)); }
-function sentForms(){ return formsForYear(selYear).filter(f=>f.status==='enviado').sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)); }
+// Actualizado: Mostrar tanto enviados como los que solicitaron edición
+function sentForms(){ return formsForYear(selYear).filter(f=>f.status==='enviado' || f.status==='Edicion Solicitada').sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)); }
 function allMyForms(){ return Object.values(DB.forms).filter(f=>f.email===CU.email).sort((a,b)=>b.year-a.year||new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)); }
 
 function mktC(m){ if(!m)return''; if(m.includes('FOCA'))return'foca'; if(m.includes('Ambos'))return'both'; return'viu'; }
@@ -279,11 +270,48 @@ async function render(){
 }
 
 /* ════════════════════════════════════════
+   API ACTIONS (Admin Delete & Status)
+════════════════════════════════════════ */
+async function deleteFormComplete(formId) {
+  if(!confirm('⚠️ ¿Estás seguro de eliminar este formato por completo? Esta acción NO se puede deshacer.')) return;
+  try {
+      const res = await fetch(`${API_URL}/forms/${formId}`, { method: 'DELETE' });
+      if(res.ok) {
+          showToast('✓ Formato y KPIs eliminados completamente');
+          view = CU.role === 'admin' ? 'admin' : 'home';
+          await loadDB();
+          render();
+      } else {
+          showToast('❌ Error al eliminar');
+      }
+  } catch(e) { console.error(e); }
+}
+
+async function updateFormStatus(formId, newStatus) {
+  if(!confirm(`¿Deseas cambiar el estado a: ${newStatus}?`)) return;
+  try {
+      const res = await fetch(`${API_URL}/forms/${formId}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+      });
+      if(res.ok) {
+          showToast('✓ Estado actualizado');
+          await loadDB();
+          render();
+      } else {
+          showToast('❌ Error al actualizar estado');
+      }
+  } catch(e) { console.error(e); }
+}
+
+/* ════════════════════════════════════════
    VIEWS (HOME & CARDS)
 ════════════════════════════════════════ */
 function renderHome(){
   const forms=myForms();
-  const sent=forms.filter(f=>f.status==='enviado');
+  // Incluimos ambos estados para no ocultarle su formato al usuario
+  const sent=forms.filter(f=>f.status==='enviado' || f.status==='Edicion Solicitada');
   const drafts=forms.filter(f=>f.status==='borrador');
   const formatWord=(n,s='formato',p='formatos')=>n===1?s:p;
   return`
@@ -312,6 +340,9 @@ function renderHome(){
 
 function rcCard(f){
   const p=compl(f);
+  const statusColor = f.status === 'Edicion Solicitada' ? '#D97706' : (f.status === 'enviado' ? 'var(--teal-600)' : 'var(--text-3)');
+  const statusBg = f.status === 'Edicion Solicitada' ? '#FEF3C7' : (f.status === 'enviado' ? 'rgba(16,185,129,.15)' : 'rgba(0,0,0,.05)');
+
   return`<div class="rc ${mktC(f.mercado)}" onclick="openDetail('${f.id}')">
     <div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:5px">
       <div><div class="rc-proc">${esc(f.proceso)||'Sin nombre'}</div><div class="rc-lider">${esc(f.lider)}</div></div>
@@ -325,7 +356,7 @@ function rcCard(f){
       <div class="compl-inline">
         <div class="compl-bar-sm"><div class="compl-bar-sm-fill" style="width:${p}%"></div></div>
         <span style="font-size:10px;color:var(--text-3)">${p}%</span>
-        <span class="${f.status==='enviado'?'pill-sent':'pill-draft'} pill" style="padding:2px 7px;font-size:10px">${f.status}</span>
+        <span class="pill" style="padding:2px 7px;font-size:10px;color:${statusColor};background:${statusBg}">${f.status}</span>
       </div>
     </div>
   </div>`;
@@ -643,12 +674,12 @@ async function collectSave(status, navigate=true){
 }
 
 /* ════════════════════════════════════════
-   VIEW: DETAIL
+   VIEW: DETAIL (CON BOTONES ADMIN Y AUTORIZACIÓN)
 ════════════════════════════════════════ */
 function renderDetail(f){
   if(!f)return`<div class="page-header"><div class="page-title">No encontrado</div></div>`;
   const mc=mktC(f.mercado);
-  const isOwner=CU.email===f.email||CU.role==='admin';
+  const isOwner=CU.email===f.email;
   const kpiRows=(f.kpis||[]).filter(k=>k.ind).map(k=>`<tr>
     <td><strong>${esc(k.ind)}</strong></td>
     <td>${esc(k.base)||'—'}</td>
@@ -657,14 +688,36 @@ function renderDetail(f){
     <td>${semI(k.sem)}</td>
   </tr>`).join('');
   const yr=f.year||selYear;
+
+  // Renderizar la botonera inteligente según el ROL y el ESTADO
+  let actionBtns = '';
+  if (CU.role === 'admin') {
+      actionBtns += `<button class="btn btn-outline btn-sm" onclick="startEdit('${f.id}')">✏️ Editar como Admin</button>`;
+      actionBtns += `<button class="btn btn-outline btn-sm" style="color:#DC2626;border-color:#FECACA" onclick="deleteFormComplete('${f.id}')">🗑️ Eliminar</button>`;
+      if (f.status === 'Edicion Solicitada') {
+          actionBtns += `<button class="btn btn-teal btn-sm" onclick="updateFormStatus('${f.id}', 'borrador')" style="background:#D97706;border-color:#D97706">⚠️ Aprobar Edición</button>`;
+      }
+  } else if (isOwner) {
+      if (f.status === 'enviado') {
+          actionBtns += `<button class="btn btn-outline btn-sm" onclick="updateFormStatus('${f.id}', 'Edicion Solicitada')">🔓 Solicitar permiso para editar</button>`;
+      } else if (f.status === 'Edicion Solicitada') {
+          actionBtns += `<span style="font-size:12px;color:#D97706;font-weight:bold;background:#FEF3C7;padding:6px 12px;border-radius:6px">⏳ Esperando aprobación de gerencia...</span>`;
+      } else {
+          actionBtns += `<button class="btn btn-outline btn-sm" onclick="startEdit('${f.id}')">Continuar Editando</button>`;
+      }
+  }
+
+  const statusColor = f.status === 'Edicion Solicitada' ? '#D97706' : (f.status === 'enviado' ? 'var(--teal-600)' : 'var(--text-3)');
+  const statusBg = f.status === 'Edicion Solicitada' ? '#FEF3C7' : (f.status === 'enviado' ? 'rgba(16,185,129,.25)' : 'rgba(251,191,36,.2)');
+
   return`
   <div class="page-header">
     <div>
       <div class="page-title">${esc(f.proceso)} <em>${yr}</em></div>
       <div class="page-sub">${esc(f.lider)}</div>
     </div>
-    <div style="display:flex;gap:8px">
-      ${isOwner&&f.status!=='enviado'?`<button class="btn btn-outline btn-sm" onclick="startEdit('${f.id}')">Editar</button>`:''}
+    <div style="display:flex;gap:8px;align-items:center">
+      ${actionBtns}
       <button class="btn btn-ghost btn-sm" onclick="setView('${CU.role==='admin'?'admin':'home'}')">← Volver</button>
     </div>
   </div>
@@ -676,7 +729,9 @@ function renderDetail(f){
       <div class="dv-badges">
         <span class="dv-b">${mktL(f.mercado)}</span>
         ${(f.bsc||[]).map(c=>`<span class="dv-b">${c}</span>`).join('')}
-        <span class="dv-b" style="background:${f.status==='enviado'?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}">${f.status==='enviado'?'✓ Enviado':'⏳ Borrador'}</span>
+        <span class="dv-b" style="background:${statusBg};color:${statusColor};font-weight:bold">
+          ${f.status==='enviado'?'✓ Enviado':(f.status==='Edicion Solicitada'?'⚠️ Solicitud de edición':'⏳ Borrador')}
+        </span>
       </div>
     </div>
     <div class="dv-body">
@@ -776,7 +831,7 @@ function renderAdmin(){
   </div>
   <div class="content-pad">
     <div class="tab-bar anim-up">
-      <button class="tab-item ${adminTab==='sent'?'on':''}" onclick="setAdminTab('sent')">Formatos enviados (${sent.length})</button>
+      <button class="tab-item ${adminTab==='sent'?'on':''}" onclick="setAdminTab('sent')">Formatos activos (${sent.length})</button>
       <button class="tab-item ${adminTab==='bsc'?'on':''}" onclick="setAdminTab('bsc')">Dashboard BSC</button>
       <button class="tab-item ${adminTab==='users'?'on':''}" onclick="setAdminTab('users')">Usuarios</button>
       <button class="tab-item ${adminTab==='years'?'on':''}" onclick="setAdminTab('years')">Gestión de años</button>
@@ -792,34 +847,18 @@ function renderAdmin(){
   </div>`;
 }
 
-// Funciones lógicas para los botones
-async function saveNewYear(){
-  const val = document.getElementById('new-year-input').value;
-  if(!val) return;
-  await fetch(`${API_URL}/years`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({anio: parseInt(val)})
-  });
-  await loadDB(); render();
-}   
-
-async function deleteYear(y){
-  if(formsForYear(y).length > 0) return alert("No puedes borrar años con datos.");
-  if(confirm(`¿Borrar año ${y}?`)){
-      await fetch(`${API_URL}/years/${y}`, { method: 'DELETE' });
-      await loadDB(); render();
-  }
-}
-
 function renderSent(sent){
-  if(!sent.length)return`<div class="empty"><div class="empty-icon">📬</div><div class="empty-title">Sin formatos enviados</div><div class="empty-sub">Cuando los líderes envíen sus formatos aparecerán aquí.</div></div>`;
+  if(!sent.length)return`<div class="empty"><div class="empty-icon">📬</div><div class="empty-title">Sin formatos activos</div><div class="empty-sub">Cuando los líderes envíen sus formatos aparecerán aquí.</div></div>`;
   return`<div class="sent-grid">${sent.map(f=>{
     const col=mktColor(f.mercado);
     const bscBadges=(f.bsc||[]).map(c=>{ const o=BSC.find(b=>b.code===c); return`<span class="pill" style="background:${o?.bg};color:${o?.color};border:none;padding:2px 7px;font-size:10px">${c}</span>`; }).join('');
     const kpiChips=(f.kpis||[]).filter(k=>k.ind).map(k=>`<span class="kpi-chip">${semI(k.sem)} ${esc(k.ind.length>20?k.ind.slice(0,20)+'…':k.ind)}</span>`).join('');
-    return`<div class="sc" onclick="openDetail('${f.id}')">
-      <div class="sc-stripe" style="background:${col}"></div>
+    
+    // Alerta visual para el admin si se pidió edición
+    const editionAlert = f.status === 'Edicion Solicitada' ? `<div style="background:#FEF3C7;color:#D97706;padding:4px 8px;font-size:11px;font-weight:bold;margin-bottom:8px;border-radius:4px;border:1px solid #FDE68A">⚠️ El líder solicitó permiso para editar este formato</div>` : '';
+
+    return`<div class="sc" onclick="openDetail('${f.id}')" style="${f.status === 'Edicion Solicitada' ? 'border:1px solid #FCD34D' : ''}">
+      <div class="sc-stripe" style="background:${f.status === 'Edicion Solicitada' ? '#F59E0B' : col}"></div>
       <div class="sc-top">
         <div style="display:flex;align-items:start;justify-content:space-between">
           <div><div class="sc-proc">${esc(f.proceso)}</div><div class="sc-lider">${esc(f.lider)}</div></div>
@@ -828,6 +867,7 @@ function renderSent(sent){
         <div class="sc-bsc-row">${bscBadges}</div>
       </div>
       <div class="sc-body">
+        ${editionAlert}
         ${(()=>{
           const items=(f.mpaItems&&f.mpaItems.length)?f.mpaItems:[{meta26:f.meta26,meta27:f.meta27}];
           const yr1=(f.years&&f.years[0])||f.year||selYear;
@@ -845,7 +885,7 @@ function renderSent(sent){
 function renderBSC(sent){
   const axisCount=codes=>new Set(sent.filter(f=>(f.bsc||[]).some(c=>codes.includes(c))).map(f=>f.id)).size;
   const statsHTML=[
-    {n:sent.length,l:'Formatos enviados',cls:'ds-teal'},
+    {n:sent.length,l:'Formatos activos',cls:'ds-teal'},
     {n:axisCount(['4.1','4.2']),l:'Impactan Financiera',cls:'ds-teal'},
     {n:axisCount(['3.1','3.2','3.3']),l:'Impactan Clientes',cls:'ds-blue'},
     {n:axisCount(['2.1','2.2','2.3','1.1','1.2','1.3','1.4','1.5']),l:'Impactan Procesos',cls:'ds-sage'},
@@ -888,7 +928,6 @@ function renderBSC(sent){
 }
 
 function renderUsers(){
-  // Convertimos el objeto de usuarios en un array y lo ordenamos alfabéticamente
   const users = Object.values(DB.users).sort((a,b)=>a.name.localeCompare(b.name));
   
   if(users.length === 0) {
@@ -899,7 +938,6 @@ function renderUsers(){
     <table class="ut">
       <thead><tr><th>Nombre</th><th>Correo</th><th>Proceso</th><th>Rol</th><th>Formatos</th><th>Registrado</th></tr></thead>
       <tbody>${users.map(u=>{
-        // Calculamos cuántos formatos tiene este usuario
         const all = Object.values(DB.forms).filter(f=>f.email===u.email);
         const sent = all.filter(f=>f.status==='enviado').length;
         
@@ -938,34 +976,16 @@ function renderAdminYears(){
   </div>`;
 }
 
-// FUNCIONES LÓGICAS PARA LA GESTIÓN DE AÑOS
-async function saveNewYear(){
-  const val = document.getElementById('new-year-input').value;
-  if(!val) return;
-  try {
-    await fetch(`${API_URL}/years`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({anio: parseInt(val)})
-    });
-    await loadDB(); 
-    render(); 
-    showToast(`Año ${val} agregado`);
-  } catch(e){ showToast('❌ Error al agregar'); }
-}
-
-async function deleteYear(y){
-  if(formsForYear(y).length > 0) return alert("No puedes borrar años que ya tienen formatos guardados.");
-  if(confirm(`¿Borrar año ${y}?`)){
-      try {
-        await fetch(`${API_URL}/years/${y}`, { method: 'DELETE' });
-        await loadDB(); 
-        render();
-        showToast(`Año ${y} eliminado`);
-      } catch(e){ showToast('❌ Error al eliminar'); }
-  }
-}
-/* INIT */
-(async()=>{ 
+/* INIT CON PERSISTENCIA DE SESIÓN */
+window.onload = async () => {
   await loadDB(); 
-})();
+  
+  const savedUser = localStorage.getItem('compass_user');
+  if (savedUser) {
+      CU = JSON.parse(savedUser);
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('app-wrap').classList.add('visible');
+      setupSidebar();
+      setView('home');
+  }
+};

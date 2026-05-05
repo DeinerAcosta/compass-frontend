@@ -50,7 +50,38 @@
       <div id="reg-form" style="display:none">
         <div class="grid-2" style="margin-bottom:12px">
           <div class="field"><label>Nombre completo</label><input type="text" id="reg-name" placeholder="Tu nombre"></div>
-          <div class="field"><label>Proceso / Área</label><input type="text" id="reg-proceso" placeholder="Ej: Glaucoma"></div>
+          <div class="field">
+  <label>Proceso / Área</label>
+  <select id="reg-proceso" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--body); font-size: 14px; background: var(--white);">
+    <option value="">Selecciona tu área...</option>
+    <option value="Gerencia">Gerencia</option>
+    <option value="Dirección Científica">Dirección Científica</option>
+    <option value="Comercial y Mercadeo">Comercial y Mercadeo</option>
+    <option value="Facturación y Cartera">Facturación y Cartera</option>
+    <option value="Logística">Logística</option>
+    <option value="Compras">Compras</option>
+    <option value="Servicio al Cliente (SIAU)">Servicio al Cliente (SIAU)</option>
+    <option value="Cirugía">Cirugía</option>
+    <option value="Seguridad del Paciente">Seguridad del Paciente</option>
+    <option value="Banco de Tejidos">Banco de Tejidos</option>
+    <option value="Talento Humano">Talento Humano</option>
+    <option value="SST">SST</option>
+    <option value="TSI">TSI</option>
+    <option value="Proyectos">Proyectos</option>
+    <option value="Sala Azul">Sala Azul</option>
+    <option value="Investigación (CIRVO)">Investigación (CIRVO)</option>
+    <option value="Glaucoma">Glaucoma</option>
+    <option value="Retina">Retina</option>
+    <option value="Segmento Anterior">Segmento Anterior</option>
+    <option value="Oculoplástica">Oculoplástica</option>
+    <option value="Pediatría">Pediatría</option>
+    <option value="Cartagena">Cartagena</option>
+    <option value="Santa Marta">Santa Marta</option>
+    <option value="Valledupar">Valledupar</option>
+    <option value="Riohacha">Riohacha</option>
+    <option value="Otro">Otro</option>
+  </select>
+</div>
         </div>
         <div class="field" style="margin-bottom:12px"><label>Correo institucional</label><input type="email" id="reg-email" placeholder="usuario@viu.com.co"></div>
         <div class="field" style="margin-bottom:18px"><label>Contraseña</label><input type="password" id="reg-pass" placeholder="Mínimo 6 caracteres"></div>
