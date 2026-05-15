@@ -103,6 +103,10 @@ async function doLogin(){
     
     const data = await res.json();
     loginUser(data.usuario);
+    // Si la BD marca que debe cambiar la contraseña (vino de un reset), forzamos modal
+    if (data.usuario && data.usuario.must_change_password) {
+      openChangePasswordModal(true);
+    }
   } catch(e) {
       showErr('Error al conectar con el servidor.');
   }
@@ -159,10 +163,12 @@ function loginUser(u){
   document.getElementById('app-wrap').classList.add('visible');
   setupSidebar();
   setView('home');
+  startNotifPolling();
 }
 
 function doLogout(){
   CU = null; editId = null; selId = null;
+  stopNotifPolling();
   // Borramos la sesión al salir
   localStorage.removeItem('compass_user');
   document.getElementById('auth-screen').style.display='flex';
@@ -978,8 +984,8 @@ function renderAdminYears(){
 
 /* INIT CON PERSISTENCIA DE SESIÓN */
 window.onload = async () => {
-  await loadDB(); 
-  
+  await loadDB();
+
   const savedUser = localStorage.getItem('compass_user');
   if (savedUser) {
       CU = JSON.parse(savedUser);
@@ -987,5 +993,251 @@ window.onload = async () => {
       document.getElementById('app-wrap').classList.add('visible');
       setupSidebar();
       setView('home');
+      startNotifPolling();
+      if (CU.must_change_password) {
+          openChangePasswordModal(true);
+      }
   }
+
+  // Cerrar el panel de notificaciones si haces clic fuera
+  document.addEventListener('click', (e) => {
+      const panel = document.getElementById('notif-panel');
+      const bell = document.getElementById('notif-bell');
+      if (panel && panel.style.display === 'block' &&
+          !panel.contains(e.target) && !bell.contains(e.target)) {
+          panel.style.display = 'none';
+      }
+  });
 };
+
+/* ════════════════════════════════════════
+   RECUPERACIÓN / CAMBIO DE CONTRASEÑA
+════════════════════════════════════════ */
+function openForgotModal() {
+    document.getElementById('forgot-email').value =
+        document.getElementById('li-email').value || '';
+    document.getElementById('forgot-msg').style.display = 'none';
+    document.getElementById('forgot-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('forgot-email').focus(), 50);
+}
+
+function closeForgotModal() {
+    document.getElementById('forgot-modal').style.display = 'none';
+}
+
+function showForgotMsg(text, ok) {
+    const el = document.getElementById('forgot-msg');
+    el.textContent = text;
+    el.className = 'cmp-modal-msg ' + (ok ? 'ok' : 'err');
+    el.style.display = 'block';
+}
+
+async function doForgotPassword() {
+    const email = document.getElementById('forgot-email').value.trim().toLowerCase();
+    if (!email) { showForgotMsg('Ingresa tu correo institucional.', false); return; }
+
+    const btn = document.getElementById('forgot-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    try {
+        const res = await fetch(`${API_URL}/auth/forgot-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            showForgotMsg('✓ Si el correo está registrado, recibirás un mensaje con tu contraseña provisional. Revisa también la bandeja de spam.', true);
+            setTimeout(closeForgotModal, 4000);
+        } else {
+            showForgotMsg(data.detail || 'No se pudo enviar el correo. Intenta más tarde.', false);
+        }
+    } catch (e) {
+        showForgotMsg('Error de conexión con el servidor.', false);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Enviar correo';
+    }
+}
+
+let _forceChangePassword = false;
+function openChangePasswordModal(forced) {
+    _forceChangePassword = !!forced;
+    document.getElementById('cp-current').value = '';
+    document.getElementById('cp-new').value = '';
+    document.getElementById('cp-confirm').value = '';
+    document.getElementById('change-pass-msg').style.display = 'none';
+    document.getElementById('change-pass-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('cp-current').focus(), 50);
+}
+
+function showChangePassMsg(text, ok) {
+    const el = document.getElementById('change-pass-msg');
+    el.textContent = text;
+    el.className = 'cmp-modal-msg ' + (ok ? 'ok' : 'err');
+    el.style.display = 'block';
+}
+
+async function doChangePassword() {
+    const cur = document.getElementById('cp-current').value;
+    const np = document.getElementById('cp-new').value;
+    const cf = document.getElementById('cp-confirm').value;
+
+    if (!cur || !np || !cf) { showChangePassMsg('Llena todos los campos.', false); return; }
+    if (np.length < 6) { showChangePassMsg('La nueva contraseña debe tener al menos 6 caracteres.', false); return; }
+    if (np !== cf) { showChangePassMsg('Las contraseñas nuevas no coinciden.', false); return; }
+    if (np === cur) { showChangePassMsg('La nueva contraseña debe ser distinta a la provisional.', false); return; }
+
+    const btn = document.getElementById('cp-submit-btn');
+    btn.disabled = true;
+    const txtOriginal = btn.textContent;
+    btn.textContent = 'Actualizando...';
+
+    try {
+        const res = await fetch(`${API_URL}/auth/change-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: CU.email,
+                current_password: cur,
+                new_password: np
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            CU.must_change_password = false;
+            localStorage.setItem('compass_user', JSON.stringify(CU));
+            showChangePassMsg('✓ Contraseña actualizada correctamente.', true);
+            setTimeout(() => {
+                document.getElementById('change-pass-modal').style.display = 'none';
+                showToast('Contraseña actualizada');
+            }, 1200);
+        } else {
+            showChangePassMsg(data.detail || 'No se pudo actualizar la contraseña.', false);
+        }
+    } catch (e) {
+        showChangePassMsg('Error de conexión con el servidor.', false);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = txtOriginal;
+    }
+}
+
+/* ════════════════════════════════════════
+   NOTIFICACIONES (campana + polling)
+════════════════════════════════════════ */
+let notifPollTimer = null;
+let _notifCache = [];
+
+function startNotifPolling() {
+    stopNotifPolling();
+    fetchNotifs();
+    notifPollTimer = setInterval(fetchNotifs, 30000); // cada 30s
+}
+
+function stopNotifPolling() {
+    if (notifPollTimer) { clearInterval(notifPollTimer); notifPollTimer = null; }
+    const badge = document.getElementById('notif-badge');
+    if (badge) badge.style.display = 'none';
+}
+
+async function fetchNotifs() {
+    if (!CU || !CU.email) return;
+    try {
+        const res = await fetch(`${API_URL}/notifications/${encodeURIComponent(CU.email)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        _notifCache = data.items || [];
+        updateNotifBadge(data.unread_count || 0);
+        // Si el panel está abierto, lo re-renderizamos
+        const panel = document.getElementById('notif-panel');
+        if (panel && panel.style.display === 'block') renderNotifPanel();
+    } catch (e) {
+        // silencioso
+    }
+}
+
+function updateNotifBadge(count) {
+    const badge = document.getElementById('notif-badge');
+    if (!badge) return;
+    if (count > 0) {
+        badge.textContent = count > 9 ? '9+' : String(count);
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function toggleNotifPanel(ev) {
+    if (ev) ev.stopPropagation();
+    const panel = document.getElementById('notif-panel');
+    if (!panel) return;
+    if (panel.style.display === 'block') {
+        panel.style.display = 'none';
+    } else {
+        renderNotifPanel();
+        panel.style.display = 'block';
+    }
+}
+
+function renderNotifPanel() {
+    const list = document.getElementById('notif-panel-list');
+    if (!list) return;
+    if (!_notifCache.length) {
+        list.innerHTML = `<div class="notif-empty">No tienes notificaciones por ahora.</div>`;
+        return;
+    }
+    list.innerHTML = _notifCache.map(n => {
+        const icon = n.tipo === 'edicion_solicitada' ? '⚠️' :
+                     n.tipo === 'edicion_aprobada' ? '✓' : '🔔';
+        const dt = n.created_at ? fmtNotifDate(n.created_at) : '';
+        const clickAttr = n.formulario_id
+            ? `onclick="onNotifClick(${n.id}, '${n.formulario_id}')"`
+            : `onclick="onNotifClick(${n.id}, null)"`;
+        return `<div class="notif-item ${n.leida ? 'read' : 'unread'}" ${clickAttr}>
+            <div class="notif-icon">${icon}</div>
+            <div class="notif-body">
+                <div class="notif-title">${esc(n.titulo)}</div>
+                <div class="notif-msg">${esc(n.mensaje || '')}</div>
+                <div class="notif-date">${dt}</div>
+            </div>
+            ${n.leida ? '' : '<div class="notif-dot"></div>'}
+        </div>`;
+    }).join('');
+}
+
+function fmtNotifDate(iso) {
+    try {
+        const d = new Date(iso);
+        const diff = (Date.now() - d.getTime()) / 1000;
+        if (diff < 60) return 'hace instantes';
+        if (diff < 3600) return `hace ${Math.floor(diff/60)} min`;
+        if (diff < 86400) return `hace ${Math.floor(diff/3600)} h`;
+        return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+    } catch(e) { return ''; }
+}
+
+async function onNotifClick(notifId, formId) {
+    // marca como leída
+    try { await fetch(`${API_URL}/notifications/${notifId}/read`, { method: 'PUT' }); } catch(e) {}
+    // cierra panel
+    document.getElementById('notif-panel').style.display = 'none';
+    // abre el formato si aplica
+    if (formId && DB.forms[formId]) {
+        openDetail(formId);
+    } else if (formId) {
+        await loadDB();
+        if (DB.forms[formId]) openDetail(formId);
+    }
+    fetchNotifs();
+}
+
+async function markAllNotifsRead() {
+    if (!CU || !CU.email) return;
+    try {
+        await fetch(`${API_URL}/notifications/read-all/${encodeURIComponent(CU.email)}`, { method: 'PUT' });
+        fetchNotifs();
+        showToast('Todas las notificaciones marcadas como leídas');
+    } catch(e) { /* silencioso */ }
+}

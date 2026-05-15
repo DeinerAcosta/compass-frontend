@@ -43,7 +43,10 @@
 
       <div id="login-form">
         <div class="field" style="margin-bottom:12px"><label>Correo institucional</label><input type="email" id="li-email" placeholder="usuario@viu.com.co" autocomplete="email"></div>
-        <div class="field" style="margin-bottom:18px"><label>Contraseña</label><input type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password"></div>
+        <div class="field" style="margin-bottom:8px"><label>Contraseña</label><input type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password"></div>
+        <div style="text-align:right;margin-bottom:18px">
+          <a href="#" class="auth-forgot-link" onclick="event.preventDefault();openForgotModal()">¿Olvidaste tu contraseña?</a>
+        </div>
         <button class="btn btn-primary btn-w" onclick="doLogin()">Ingresar <span>→</span></button>
       </div>
 
@@ -133,17 +136,77 @@
     <div class="sb-bottom">
       <div class="sb-user">
         <div class="sb-avatar" id="sb-avatar"></div>
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="sb-user-name" id="sb-uname"></div>
           <div class="sb-user-role" id="sb-urole"></div>
         </div>
+        <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel(event)" title="Notificaciones">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span class="notif-badge" id="notif-badge" style="display:none">0</span>
+        </button>
       </div>
       <button class="sb-logout" onclick="doLogout()"><span>←</span> Cerrar sesión</button>
     </div>
   </nav>
 
+  <!-- Panel de notificaciones (flotante) -->
+  <div id="notif-panel" class="notif-panel" style="display:none">
+    <div class="notif-panel-head">
+      <div class="notif-panel-title">Notificaciones</div>
+      <button class="notif-mark-all" onclick="markAllNotifsRead()">Marcar todas como leídas</button>
+    </div>
+    <div id="notif-panel-list" class="notif-panel-list"></div>
+  </div>
+
   <!-- Content -->
   <div id="content"></div>
+</div>
+
+<!-- ═══ MODAL: Olvidé mi contraseña ═══ -->
+<div id="forgot-modal" class="cmp-modal-overlay" style="display:none">
+  <div class="cmp-modal">
+    <button class="cmp-modal-close" onclick="closeForgotModal()">×</button>
+    <div class="cmp-modal-icon">🔑</div>
+    <h2 class="cmp-modal-title">Recuperar contraseña</h2>
+    <p class="cmp-modal-sub">Ingresa el correo con el que te registraste. Te enviaremos una contraseña provisional para que puedas ingresar y crear una nueva.</p>
+    <div id="forgot-msg" class="cmp-modal-msg" style="display:none"></div>
+    <div class="field" style="margin-bottom:16px">
+      <label>Correo institucional</label>
+      <input type="email" id="forgot-email" placeholder="usuario@viu.com.co" autocomplete="email">
+    </div>
+    <div class="cmp-modal-actions">
+      <button class="btn btn-outline" onclick="closeForgotModal()">Cancelar</button>
+      <button class="btn btn-primary" id="forgot-submit-btn" onclick="doForgotPassword()">Enviar correo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Cambio obligatorio de contraseña ═══ -->
+<div id="change-pass-modal" class="cmp-modal-overlay" style="display:none">
+  <div class="cmp-modal">
+    <div class="cmp-modal-icon">🔒</div>
+    <h2 class="cmp-modal-title">Crea tu nueva contraseña</h2>
+    <p class="cmp-modal-sub">Por seguridad debes cambiar la contraseña provisional antes de continuar usando COMPASS.</p>
+    <div id="change-pass-msg" class="cmp-modal-msg" style="display:none"></div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Contraseña provisional (la que recibiste por correo)</label>
+      <input type="password" id="cp-current" autocomplete="current-password">
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Nueva contraseña <span style="color:var(--text-3);font-weight:400">(mínimo 6 caracteres)</span></label>
+      <input type="password" id="cp-new" autocomplete="new-password">
+    </div>
+    <div class="field" style="margin-bottom:18px">
+      <label>Confirma la nueva contraseña</label>
+      <input type="password" id="cp-confirm" autocomplete="new-password">
+    </div>
+    <div class="cmp-modal-actions">
+      <button class="btn btn-primary btn-w" id="cp-submit-btn" onclick="doChangePassword()">Actualizar contraseña</button>
+    </div>
+  </div>
 </div>
 
 <!-- Toast -->
