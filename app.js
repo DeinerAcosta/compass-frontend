@@ -44,25 +44,57 @@ let yearDDOpen = false;
 let mpaItems = []; 
 
 /* ════════════════════════════════════════
-   CARGA DE DATOS DESDE MYSQL
+   CARGA DE DATOS DESDE MYSQL (paralelo + cache)
 ════════════════════════════════════════ */
-async function loadDB(){
+const CACHE_KEY = 'compass_db_cache_v1';
+
+function loadCacheFromStorage(){
   try {
-    const resForms = await fetch(`${API_URL}/forms`);
+    const raw = localStorage.getItem(CACHE_KEY);
+    if(!raw) return false;
+    const cache = JSON.parse(raw);
+    if(cache.forms) DB.forms = cache.forms;
+    if(cache.users) DB.users = cache.users;
+    if(cache.years && cache.years.length) DB.years = cache.years;
+    DB.years.sort((a,b)=>b-a);
+    return true;
+  } catch(e) { return false; }
+}
+
+function saveCacheToStorage(){
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      forms: DB.forms, users: DB.users, years: DB.years, ts: Date.now()
+    }));
+  } catch(e) { /* quota o private mode */ }
+}
+
+async function loadDB(silent = false){
+  try {
+    // 3 fetches en paralelo en lugar de secuenciales
+    const [resForms, resUsers, resYears] = await Promise.all([
+      fetch(`${API_URL}/forms`),
+      fetch(`${API_URL}/users`),
+      fetch(`${API_URL}/years`)
+    ]);
     if(resForms.ok) DB.forms = await resForms.json();
-
-    const resUsers = await fetch(`${API_URL}/users`);
     if(resUsers.ok) DB.users = await resUsers.json();
-
-    const resYears = await fetch(`${API_URL}/years`);
     if(resYears.ok) {
-        const yearsData = await resYears.json();
-        if(yearsData.length > 0) DB.years = yearsData;
+      const yearsData = await resYears.json();
+      if(yearsData.length > 0) DB.years = yearsData;
     }
+    DB.years.sort((a,b)=>b-a);
+    saveCacheToStorage();
   } catch(e) {
-    console.error("No se pudo cargar la base de datos", e);
+    if(!silent) console.error("No se pudo cargar la base de datos", e);
   }
-  DB.years.sort((a,b)=>b-a);
+}
+
+// Refresca datos del backend y vuelve a pintar la vista actual.
+// Se usa después de mutaciones (guardar, eliminar, cambiar estado).
+async function refreshDB(){
+  await loadDB(true);
+  render();
 }
 
 /* ════════════════════════════════════════
@@ -169,8 +201,9 @@ function loginUser(u){
 function doLogout(){
   CU = null; editId = null; selId = null;
   stopNotifPolling();
-  // Borramos la sesión al salir
+  // Borramos sesión y cache al salir
   localStorage.removeItem('compass_user');
+  localStorage.removeItem(CACHE_KEY);
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('app-wrap').classList.remove('visible');
   document.getElementById('li-pass').value = '';
@@ -263,8 +296,7 @@ function openDetail(id){ selId=id; view='detail'; updateNavHighlight(); render()
 function startEdit(id){ editId=id; view='form'; updateNavHighlight(); render(); }
 function setAdminTab(t){ adminTab=t; view='admin'; updateNavHighlight(); render(); }
 
-async function render(){
-  await loadDB();
+function render(){
   const content = document.getElementById('content');
   if(view==='home') content.innerHTML=renderHome();
   else if(view==='form') content.innerHTML=renderForm(editId?DB.forms[editId]:newF());
@@ -665,15 +697,18 @@ async function collectSave(status, navigate=true){
 
     if (!response.ok) throw new Error('Error al guardar en BD');
 
-    editId = payload.id; 
+    editId = payload.id;
     DB.forms[payload.id] = payload; // Temporal update for UI local
-    
-    if(navigate){ 
-      showToast(status==='enviado'?'✓ Formato enviado':'Borrador guardado'); setView('home'); 
+    saveCacheToStorage();           // sync cache para próximas recargas
+
+    if(navigate){
+      showToast(status==='enviado'?'✓ Formato enviado':'Borrador guardado'); setView('home');
     } else {
       document.getElementById('f-pct').textContent = compl(payload) + '%';
       document.getElementById('prog-fill').style.width = compl(payload) + '%';
     }
+    // Refresca desde backend en background (no bloquea UI)
+    loadDB(true);
   } catch (error) {
     showToast('❌ Error de conexión con MySQL');
   }
@@ -982,22 +1017,40 @@ function renderAdminYears(){
   </div>`;
 }
 
-/* INIT CON PERSISTENCIA DE SESIÓN */
-window.onload = async () => {
-  await loadDB();
+/* INIT CON PERSISTENCIA DE SESIÓN — cache-first
+   1. Lee cache local (síncrono) → muestra la app YA
+   2. Refresca datos del backend en background (despierta Render)
+   3. Si llegan datos frescos, re-pinta la vista actual */
+window.onload = () => {
+  // 1) Cache local primero (instantáneo)
+  loadCacheFromStorage();
 
+  // 2) ¿Hay sesión guardada? Si sí, muestra la app sin esperar al backend
   const savedUser = localStorage.getItem('compass_user');
   if (savedUser) {
-      CU = JSON.parse(savedUser);
-      document.getElementById('auth-screen').style.display = 'none';
-      document.getElementById('app-wrap').classList.add('visible');
-      setupSidebar();
-      setView('home');
-      startNotifPolling();
-      if (CU.must_change_password) {
-          openChangePasswordModal(true);
+      try {
+          CU = JSON.parse(savedUser);
+          document.getElementById('auth-screen').style.display = 'none';
+          document.getElementById('app-wrap').classList.add('visible');
+          setupSidebar();
+          setView('home');
+          startNotifPolling();
+          if (CU.must_change_password) {
+              openChangePasswordModal(true);
+          }
+      } catch(e) {
+          localStorage.removeItem('compass_user');
       }
   }
+
+  // 3) Refresca datos del backend en background (también despierta Render
+  //    si estaba dormido). Cuando lleguen los datos frescos, re-pintamos.
+  loadDB(true).then(() => {
+      if (CU) {
+          setupSidebar();
+          render();
+      }
+  });
 
   // Cerrar el panel de notificaciones si haces clic fuera
   document.addEventListener('click', (e) => {
