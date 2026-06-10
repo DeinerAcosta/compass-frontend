@@ -194,7 +194,13 @@ function loginUser(u){
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app-wrap').classList.add('visible');
   setupSidebar();
-  setView('home');
+  // Admin y Viewer arrancan en el panel; usuarios normales en "home"
+  if (CU.role === 'admin' || CU.role === 'viewer') {
+      adminTab = 'sent';
+      setView('admin');
+  } else {
+      setView('home');
+  }
   startNotifPolling();
 }
 
@@ -215,10 +221,30 @@ function doLogout(){
 function setupSidebar(){
   const av = document.getElementById('sb-avatar');
   av.textContent = CU.name[0].toUpperCase();
-  av.style.background = CU.role === 'admin' ? '#182319' : '#0F7A62';
+  // Color del avatar según rol
+  av.style.background = CU.role === 'admin' ? '#182319'
+                       : CU.role === 'viewer' ? '#1252A3'
+                       : '#0F7A62';
   document.getElementById('sb-uname').textContent = CU.name;
-  document.getElementById('sb-urole').textContent = CU.role === 'admin' ? 'Administrador' : 'Líder de proceso';
-  document.getElementById('nav-admin-section').style.display = CU.role === 'admin' ? 'block' : 'none';
+  document.getElementById('sb-urole').textContent = CU.role === 'admin' ? 'Administrador'
+                                                  : CU.role === 'viewer' ? 'Revisor'
+                                                  : 'Líder de proceso';
+
+  // Mi espacio: solo para usuarios normales (líderes). Admin y Viewer no lo necesitan.
+  document.getElementById('nav-user-section').style.display = CU.role === 'user' ? 'block' : 'none';
+
+  // Sección de Administración / Revisión: visible para admin y viewer
+  const adminSection = document.getElementById('nav-admin-section');
+  adminSection.style.display = (CU.role === 'admin' || CU.role === 'viewer') ? 'block' : 'none';
+
+  // Para el viewer ocultamos las opciones de gestión (Usuarios y Años)
+  document.querySelectorAll('#nav-admin-section [data-view="admin-users"], #nav-admin-section [data-view="admin-years"]').forEach(el => {
+    el.style.display = CU.role === 'viewer' ? 'none' : '';
+  });
+  // El label "Administración" cambia a "Revisión" para viewer
+  const adminLabel = adminSection.querySelector('.sb-nav-label');
+  if (adminLabel) adminLabel.textContent = CU.role === 'viewer' ? 'Revisión' : 'Administración';
+
   renderYearSelector();
   updateSentCount();
 }
@@ -290,11 +316,27 @@ function esc(s){ if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(
 /* ════════════════════════════════════════
    NAVIGATION & RENDER ROUTER
 ════════════════════════════════════════ */
-function setView(v){ view=v; editId=null; updateNavHighlight(); render(); }
-function startNew(){ view='form'; editId=null; updateNavHighlight(); render(); }
+function setView(v){
+  // Viewer/Revisor solo puede entrar a 'admin' (enviados/bsc) y 'detail'
+  if (CU && CU.role === 'viewer' && !['admin','detail'].includes(v)) {
+    adminTab = 'sent'; v = 'admin';
+  }
+  view=v; editId=null; updateNavHighlight(); render();
+}
+function startNew(){
+  if (CU && CU.role === 'viewer') { showToast('Solo lectura: no puedes crear formatos'); return; }
+  view='form'; editId=null; updateNavHighlight(); render();
+}
 function openDetail(id){ selId=id; view='detail'; updateNavHighlight(); render(); }
-function startEdit(id){ editId=id; view='form'; updateNavHighlight(); render(); }
-function setAdminTab(t){ adminTab=t; view='admin'; updateNavHighlight(); render(); }
+function startEdit(id){
+  if (CU && CU.role === 'viewer') { showToast('Solo lectura: no puedes editar'); return; }
+  editId=id; view='form'; updateNavHighlight(); render();
+}
+function setAdminTab(t){
+  // Viewer solo puede ver 'sent' y 'bsc'
+  if (CU && CU.role === 'viewer' && !['sent','bsc'].includes(t)) t = 'sent';
+  adminTab=t; view='admin'; updateNavHighlight(); render();
+}
 
 function render(){
   const content = document.getElementById('content');
@@ -732,7 +774,10 @@ function renderDetail(f){
 
   // Renderizar la botonera inteligente según el ROL y el ESTADO
   let actionBtns = '';
-  if (CU.role === 'admin') {
+  if (CU.role === 'viewer') {
+      // Revisor: solo lectura, sin botones de acción
+      actionBtns += `<span style="font-size:12px;color:#1252A3;font-weight:bold;background:#EFF6FF;padding:6px 12px;border-radius:6px">👁️ Modo revisión (solo lectura)</span>`;
+  } else if (CU.role === 'admin') {
       actionBtns += `<button class="btn btn-outline btn-sm" onclick="startEdit('${f.id}')">✏️ Editar como Admin</button>`;
       actionBtns += `<button class="btn btn-outline btn-sm" style="color:#DC2626;border-color:#FECACA" onclick="deleteFormComplete('${f.id}')">🗑️ Eliminar</button>`;
       if (f.status === 'Edicion Solicitada') {
@@ -759,7 +804,7 @@ function renderDetail(f){
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       ${actionBtns}
-      <button class="btn btn-ghost btn-sm" onclick="setView('${CU.role==='admin'?'admin':'home'}')">← Volver</button>
+      <button class="btn btn-ghost btn-sm" onclick="setView('${(CU.role==='admin'||CU.role==='viewer')?'admin':'home'}')">← Volver</button>
     </div>
   </div>
   <div class="content-pad">
@@ -863,27 +908,40 @@ function renderHistory(){
 ════════════════════════════════════════ */
 function renderAdmin(){
   const sent = sentForms();
+  const isViewer = CU.role === 'viewer';
+  const title = isViewer ? 'Panel de <em>revisión</em>' : 'Panel <em>administrativo</em>';
+  const subtitle = isViewer
+    ? `Planeación ${selYear} · Formatos enviados (solo lectura)`
+    : `Planeación ${selYear} · Gestión global`;
+
+  // Tabs extra solo para admin
+  const extraTabs = isViewer ? '' : `
+      <button class="tab-item ${adminTab==='users'?'on':''}" onclick="setAdminTab('users')">Usuarios</button>
+      <button class="tab-item ${adminTab==='years'?'on':''}" onclick="setAdminTab('years')">Gestión de años</button>`;
+
+  // Cuerpo según tab
+  let body;
+  if (adminTab === 'sent') body = renderSent(sent);
+  else if (adminTab === 'bsc') body = renderBSC(sent);
+  else if (isViewer) body = renderSent(sent); // viewer: cualquier otro tab cae a 'sent'
+  else if (adminTab === 'users') body = renderUsers();
+  else body = renderAdminYears();
+
   return `
   <div class="page-header anim-up">
     <div>
-      <div class="page-title">Panel <em>administrativo</em></div>
-      <div class="page-sub">Planeación ${selYear} · Gestión global</div>
+      <div class="page-title">${title}</div>
+      <div class="page-sub">${subtitle}</div>
     </div>
   </div>
   <div class="content-pad">
     <div class="tab-bar anim-up">
-      <button class="tab-item ${adminTab==='sent'?'on':''}" onclick="setAdminTab('sent')">Formatos activos (${sent.length})</button>
+      <button class="tab-item ${adminTab==='sent'?'on':''}" onclick="setAdminTab('sent')">Formatos enviados (${sent.length})</button>
       <button class="tab-item ${adminTab==='bsc'?'on':''}" onclick="setAdminTab('bsc')">Dashboard BSC</button>
-      <button class="tab-item ${adminTab==='users'?'on':''}" onclick="setAdminTab('users')">Usuarios</button>
-      <button class="tab-item ${adminTab==='years'?'on':''}" onclick="setAdminTab('years')">Gestión de años</button>
+      ${extraTabs}
     </div>
     <div id="admin-body" class="anim-up anim-up-1">
-      ${
-        adminTab === 'sent' ? renderSent(sent) : 
-        adminTab === 'bsc' ? renderBSC(sent) : 
-        adminTab === 'users' ? renderUsers() : 
-        renderAdminYears()
-      }
+      ${body}
     </div>
   </div>`;
 }
@@ -1033,7 +1091,12 @@ window.onload = () => {
           document.getElementById('auth-screen').style.display = 'none';
           document.getElementById('app-wrap').classList.add('visible');
           setupSidebar();
-          setView('home');
+          if (CU.role === 'admin' || CU.role === 'viewer') {
+              adminTab = 'sent';
+              setView('admin');
+          } else {
+              setView('home');
+          }
           startNotifPolling();
           if (CU.must_change_password) {
               openChangePasswordModal(true);
