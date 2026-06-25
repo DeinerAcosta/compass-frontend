@@ -350,8 +350,295 @@ function render(){
 }
 
 /* ════════════════════════════════════════
-   EXPORTACIÓN PDF (cliente, html2pdf.js)
+   EXPORTACIÓN PDF (jsPDF — descarga directa)
 ════════════════════════════════════════ */
+function downloadFormPDF(formId){
+  const f = DB.forms[formId];
+  if (!f) { showToast('❌ Formato no encontrado'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showToast('La librería de PDF aún se está cargando, intenta de nuevo en 2 segundos.');
+    return;
+  }
+
+  showToast('📄 Generando PDF…');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+  // === Constantes de layout ===
+  const PAGE_W = 210, PAGE_H = 297;
+  const MARGIN = 12;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+
+  // Datos
+  const yr1 = (f.years && f.years[0]) || f.year || selYear;
+  const yr2 = (f.years && f.years[1]) || (yr1 + 1);
+  const items = (f.mpaItems && f.mpaItems.length) ? f.mpaItems :
+                [{meta26:f.meta26, accion26:f.accion26, meta27:f.meta27, accion27:f.accion27}];
+  const kpis = (f.kpis || []).filter(k => k.ind);
+  const today = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
+  const statusLabel = f.status === 'enviado' ? 'Enviado'
+                    : f.status === 'Edicion Solicitada' ? 'Edición solicitada'
+                    : 'Borrador';
+  const statusRGB = f.status === 'enviado' ? [15,122,98]
+                  : f.status === 'Edicion Solicitada' ? [217,119,6]
+                  : [107,114,128];
+
+  // === HEADER (banda verde) ===
+  doc.setFillColor(15, 122, 98); // #0F7A62
+  doc.rect(0, 0, PAGE_W, 32, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('CLÍNICA OFTALMOLÓGICA INTERNACIONAL', MARGIN, 9);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('COMPASS', MARGIN, 19);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Formato de Planeación Operativa', MARGIN, 25);
+
+  // Bloque derecho del header: período + fecha
+  const periodLabel = `Período ${yr1}${yr2 && yr2 !== yr1 ? ' — ' + yr2 : ''}`;
+  doc.setFillColor(255, 255, 255, 0);
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.3);
+  const periodW = doc.getTextWidth(periodLabel) + 8;
+  doc.roundedRect(PAGE_W - MARGIN - periodW, 9, periodW, 7, 1.5, 1.5, 'S');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(periodLabel, PAGE_W - MARGIN - periodW / 2, 14, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(`Generado: ${today}`, PAGE_W - MARGIN, 22, { align: 'right' });
+
+  // === TABLA DE IDENTIFICACIÓN ===
+  let cursorY = 38;
+  doc.autoTable({
+    startY: cursorY,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'plain',
+    styles: {
+      font: 'helvetica',
+      fontSize: 9,
+      cellPadding: 3,
+      lineColor: [229, 227, 220],
+      lineWidth: 0.15
+    },
+    columnStyles: {
+      0: { fillColor: [244, 243, 240], fontStyle: 'bold', textColor: [74, 72, 65], cellWidth: 50 },
+      1: { fillColor: [250, 250, 249], textColor: [26, 26, 23] }
+    },
+    body: [
+      ['Proceso', f.proceso || '—'],
+      ['Líder responsable', f.lider || '—'],
+      ['Mercado', f.mercado || '—'],
+      ['Estado', statusLabel]
+    ],
+    didParseCell: (data) => {
+      // Resalta el badge de estado con su color
+      if (data.row.index === 3 && data.column.index === 1) {
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = statusRGB;
+      }
+    }
+  });
+  cursorY = doc.lastAutoTable.finalY + 6;
+
+  // === Helper: sección con barra de color ===
+  const drawSectionTitle = (text, rgb) => {
+    if (cursorY > PAGE_H - 25) { doc.addPage(); drawFooter(); cursorY = MARGIN + 6; }
+    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    doc.rect(MARGIN, cursorY, 2, 5.5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    doc.text(text, MARGIN + 4, cursorY + 4);
+    doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+    doc.setLineWidth(0.5);
+    doc.line(MARGIN, cursorY + 6.5, PAGE_W - MARGIN, cursorY + 6.5);
+    cursorY += 10;
+  };
+
+  // === Helper: párrafo con word-wrap ===
+  const drawParagraph = (text, opts = {}) => {
+    const { color = [42, 42, 39], fontSize = 9.5, lineHeight = 4.5, italic = false } = opts;
+    doc.setFont('helvetica', italic ? 'italic' : 'normal');
+    doc.setFontSize(fontSize);
+    doc.setTextColor(color[0], color[1], color[2]);
+    const lines = doc.splitTextToSize(text || '—', CONTENT_W);
+    // Salto de página si no cabe
+    const needed = lines.length * lineHeight;
+    if (cursorY + needed > PAGE_H - 18) {
+      doc.addPage(); drawFooter(); cursorY = MARGIN + 6;
+    }
+    doc.text(lines, MARGIN, cursorY);
+    cursorY += needed + 2;
+  };
+
+  // === Helper: footer en cada página ===
+  const drawFooter = () => {
+    const pageNum = doc.internal.getNumberOfPages();
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(138, 135, 128);
+    doc.setDrawColor(229, 227, 220);
+    doc.setLineWidth(0.2);
+    doc.line(MARGIN, PAGE_H - 12, PAGE_W - MARGIN, PAGE_H - 12);
+    doc.text('COMPASS · Clínica Oftalmológica Internacional', MARGIN, PAGE_H - 7);
+    doc.text(`Generado el ${today}  ·  Página ${pageNum}`, PAGE_W - MARGIN, PAGE_H - 7, { align: 'right' });
+  };
+
+  // === C — Contexto ===
+  drawSectionTitle('C  ·  Contexto actual', [15, 122, 98]);
+  drawParagraph(f.contexto || 'Sin contexto definido.', { italic: !f.contexto });
+
+  // === O — Objetivo BSC ===
+  drawSectionTitle('O  ·  Objetivo estratégico (BSC)', [18, 82, 163]);
+  // Pills BSC
+  if ((f.bsc || []).length > 0) {
+    let x = MARGIN, y = cursorY;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    (f.bsc || []).forEach(code => {
+      const obj = BSC.find(b => b.code === code);
+      if (!obj) return;
+      const hex = obj.color.replace('#','');
+      const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+      const label = `${obj.code} · ${obj.label}`;
+      const w = doc.getTextWidth(label) + 4;
+      if (x + w > PAGE_W - MARGIN) { x = MARGIN; y += 5.5; }
+      doc.setFillColor(r, g, b);
+      doc.roundedRect(x, y, w, 4.5, 1, 1, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(label, x + 2, y + 3.2);
+      x += w + 2;
+    });
+    cursorY = y + 7;
+  } else {
+    drawParagraph('Sin objetivos BSC seleccionados.', { italic: true, color: [138, 135, 128] });
+  }
+  drawParagraph(f.objetivo || 'Sin descripción del objetivo.', { italic: !f.objetivo });
+
+  // === M+P+A — Compromisos ===
+  drawSectionTitle('M · P · A  ·  Compromisos y proyección', [42, 61, 45]);
+  items.forEach((it, idx) => {
+    if (cursorY > PAGE_H - 50) { doc.addPage(); drawFooter(); cursorY = MARGIN + 6; }
+    if (items.length > 1) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(138, 135, 128);
+      doc.text(`COMPROMISO ${idx + 1}`, MARGIN, cursorY);
+      cursorY += 4;
+    }
+    doc.autoTable({
+      startY: cursorY,
+      margin: { left: MARGIN, right: MARGIN },
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 3, lineColor: [229,227,220], lineWidth: 0.15, valign: 'top' },
+      headStyles: { fontStyle: 'bold', fontSize: 8.5, halign: 'center' },
+      columnStyles: { 0: { cellWidth: CONTENT_W / 2 }, 1: { cellWidth: CONTENT_W / 2 } },
+      head: [[
+        { content: `◆ ${yr1}`, styles: { fillColor: [15, 122, 98], textColor: [255, 255, 255] } },
+        { content: `◇ ${yr2}`, styles: { fillColor: [18, 82, 163], textColor: [255, 255, 255] } }
+      ]],
+      body: [
+        [
+          { content: (it.meta26 ? `M — META\n${it.meta26}` : 'M — META\n—'), styles: { fillColor: [250,250,249] } },
+          { content: (it.meta27 ? `P — META PROYECTADA\n${it.meta27}` : 'P — META PROYECTADA\n—'), styles: { fillColor: [250,250,249] } }
+        ],
+        [
+          { content: (it.accion26 ? `A — ACCIÓN PALANCA\n${it.accion26}` : ''), styles: { fillColor: [255,255,255] } },
+          { content: (it.accion27 ? `A — ACCIÓN PALANCA\n${it.accion27}` : ''), styles: { fillColor: [255,255,255] } }
+        ]
+      ],
+      didParseCell: (data) => {
+        if (data.section === 'body') {
+          // Primera línea (etiqueta) en negrita pequeña
+          const txt = data.cell.text.join('\n');
+          if (txt.includes('—')) {
+            data.cell.styles.cellPadding = 3;
+          }
+        }
+      }
+    });
+    cursorY = doc.lastAutoTable.finalY + 5;
+  });
+
+  // === S — KPIs ===
+  drawSectionTitle('S  ·  Semáforo de KPIs', [154, 92, 10]);
+  if (kpis.length > 0) {
+    const semColor = s => s === 'verde' ? [16,185,129]
+                       : s === 'amarillo' ? [245,158,11]
+                       : s === 'rojo' ? [220,38,38]
+                       : [156,163,175];
+    const semText = s => s === 'verde' ? 'Verde' : s === 'amarillo' ? 'Amarillo' : s === 'rojo' ? 'Rojo' : '—';
+    doc.autoTable({
+      startY: cursorY,
+      margin: { left: MARGIN, right: MARGIN },
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 2.5, lineColor: [229,227,220], lineWidth: 0.15, valign: 'middle' },
+      headStyles: { fillColor: [244,243,240], textColor: [74,72,65], fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 'auto', fontStyle: 'bold' },
+        1: { cellWidth: 24 },
+        2: { cellWidth: 24, textColor: [15,122,98], fontStyle: 'bold' },
+        3: { cellWidth: 24, textColor: [18,82,163], fontStyle: 'bold' },
+        4: { cellWidth: 24, halign: 'center' }
+      },
+      head: [['INDICADOR', 'LÍNEA BASE', `META ${yr1}`, `META ${yr2}`, 'SEMÁFORO']],
+      body: kpis.map(k => [
+        k.ind || '—',
+        k.base || '—',
+        k.meta26 || '—',
+        k.meta27 || '—',
+        { content: semText(k.sem), styles: { textColor: semColor(k.sem), fontStyle: 'bold' } }
+      ])
+    });
+    cursorY = doc.lastAutoTable.finalY + 5;
+  } else {
+    drawParagraph('Sin KPIs definidos.', { italic: true, color: [138, 135, 128] });
+  }
+
+  // === S — Supuesto + Apoyo ===
+  drawSectionTitle('S  ·  Supuesto crítico y apoyo requerido', [159, 18, 57]);
+  doc.autoTable({
+    startY: cursorY,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'grid',
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 4, lineColor: [229,227,220], lineWidth: 0.15, valign: 'top' },
+    headStyles: { fontSize: 8, fontStyle: 'bold' },
+    columnStyles: { 0: { cellWidth: CONTENT_W / 2 }, 1: { cellWidth: CONTENT_W / 2 } },
+    head: [[
+      { content: 'SUPUESTO CRÍTICO', styles: { fillColor: [255,241,242], textColor: [159, 18, 57] } },
+      { content: 'APOYO REQUERIDO DE GERENCIA', styles: { fillColor: [244,243,240], textColor: [74,72,65] } }
+    ]],
+    body: [[
+      { content: f.supuesto || 'Sin supuesto definido.', styles: { fillColor: [255,251,251] } },
+      { content: f.recurso || 'No se requiere apoyo específico.', styles: { fillColor: [250,250,249] } }
+    ]]
+  });
+
+  // Footer en TODAS las páginas
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    drawFooter();
+  }
+
+  // Descarga directa
+  const procStr = (f.proceso || 'formato').replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]+/g, '').replace(/\s+/g, '_');
+  const yr = f.year || yr1;
+  doc.save(`COMPASS_${procStr}_${yr}.pdf`);
+
+  showToast('✓ PDF descargado');
+}
+
+/* (template HTML — sin uso actualmente, conservado por si se requiere vista previa web) */
 function buildPDFHTML(f){
   const yr1 = (f.years && f.years[0]) || f.year || selYear;
   const yr2 = (f.years && f.years[1]) || (yr1 + 1);
@@ -516,85 +803,6 @@ function buildPDFHTML(f){
 
   </div>
   `;
-}
-
-function downloadFormPDF(formId){
-  const f = DB.forms[formId];
-  if (!f) { showToast('❌ Formato no encontrado'); return; }
-
-  const procStr = (f.proceso || 'formato').replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]+/g, '').replace(/\s+/g, '_');
-  const yr = f.year || ((f.years && f.years[0]) || selYear);
-  const title = `COMPASS_${procStr}_${yr}`;
-  const inner = buildPDFHTML(f);
-
-  // Estrategia nativa: ventana nueva con el HTML + window.print()
-  // El usuario elige "Guardar como PDF" en el diálogo del navegador.
-  // 100% confiable, sin depender de html2canvas.
-  const docHTML = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>${title}</title>
-<style>
-  @page { size: A4 portrait; margin: 10mm 10mm 12mm 10mm; }
-  html, body { margin: 0; padding: 0; background: #F4F3F0; }
-  body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1A1A17; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  @media print {
-    .no-print { display: none !important; }
-    html, body { background: #fff; }
-    .doc-pad { padding: 0; max-width: none; box-shadow: none; }
-  }
-  .toolbar {
-    position: sticky; top: 0; z-index: 10;
-    background: #0A120E; color: #fff;
-    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 4px 12px rgba(0,0,0,.2);
-    gap: 16px;
-  }
-  .toolbar-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .toolbar-title { font-weight: 600; font-size: 14px; }
-  .toolbar-hint { font-size: 11px; opacity: .7; }
-  .toolbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
-  .tb-btn {
-    background: #0F7A62; color: #fff; border: none;
-    padding: 9px 18px; border-radius: 6px; font-weight: 600; font-size: 13px;
-    cursor: pointer; transition: background .15s; white-space: nowrap;
-  }
-  .tb-btn:hover { background: #14957A; }
-  .tb-btn.alt { background: transparent; border: 1px solid rgba(255,255,255,.3); }
-  .tb-btn.alt:hover { background: rgba(255,255,255,.1); }
-  .doc-pad {
-    padding: 30px 24px;
-    max-width: 794px; margin: 0 auto;
-    background: #fff;
-    box-shadow: 0 4px 24px rgba(0,0,0,.08);
-  }
-</style>
-</head>
-<body>
-  <div class="toolbar no-print">
-    <div class="toolbar-left">
-      <div class="toolbar-title">📄 ${title}.pdf</div>
-      <div class="toolbar-hint">Revisa la vista previa, luego clic en "Descargar PDF" y elige "Guardar como PDF" en Destino</div>
-    </div>
-    <div class="toolbar-actions">
-      <button class="tb-btn alt" onclick="window.close()">Cerrar</button>
-      <button class="tb-btn" onclick="window.print()">📥 Descargar PDF</button>
-    </div>
-  </div>
-  <div class="doc-pad">${inner}</div>
-</body>
-</html>`;
-
-  const w = window.open('', '_blank', 'width=900,height=900');
-  if (!w) {
-    showToast('❌ Tu navegador bloqueó la ventana — permite popups para este sitio');
-    return;
-  }
-  w.document.open();
-  w.document.write(docHTML);
-  w.document.close();
-  showToast('📄 Abriendo vista previa de PDF…');
 }
 
 /* ════════════════════════════════════════
