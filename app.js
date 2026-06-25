@@ -528,11 +528,26 @@ async function downloadFormPDF(formId){
 
   showToast('📄 Generando PDF…');
 
-  // Contenedor temporal fuera de pantalla
+  // Contenedor temporal VISIBLE para html2canvas (oculto con opacity, no left:-9999)
+  // html2canvas no captura bien elementos posicionados fuera del viewport.
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:760px;background:#fff;padding:24px;';
+  wrap.style.cssText = [
+    'position:fixed',
+    'top:0',
+    'left:0',
+    'width:794px',          // ~A4 width @96dpi
+    'background:#ffffff',
+    'padding:24px',
+    'z-index:-1',
+    'opacity:0',            // invisible al ojo
+    'pointer-events:none',
+    'overflow:visible'
+  ].join(';');
   wrap.innerHTML = buildPDFHTML(f);
   document.body.appendChild(wrap);
+
+  // Esperamos un tick a que el navegador haga layout
+  await new Promise(r => setTimeout(r, 80));
 
   const procStr = (f.proceso || 'formato').replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]+/g, '').replace(/\s+/g, '_');
   const yr = f.year || ((f.years && f.years[0]) || selYear);
@@ -540,19 +555,27 @@ async function downloadFormPDF(formId){
 
   try {
     await html2pdf().set({
-      margin:       [10, 10, 12, 10],   // top, left, bottom, right (mm)
+      margin:       [10, 10, 12, 10],
       filename:     fileName,
       image:        { type: 'jpeg', quality: 0.95 },
-      html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas:  {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: 794,
+        logging: false
+      },
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
     }).from(wrap).save();
     showToast('✓ PDF descargado');
   } catch (e) {
-    console.error(e);
+    console.error('Error generando PDF:', e);
     showToast('❌ Error generando PDF');
   } finally {
-    document.body.removeChild(wrap);
+    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
   }
 }
 
