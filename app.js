@@ -526,28 +526,45 @@ async function downloadFormPDF(formId){
     return;
   }
 
-  showToast('📄 Generando PDF…');
+  // 1) Overlay opaco con spinner — TAPA visualmente al usuario el render del PDF
+  const overlay = document.createElement('div');
+  overlay.id = 'pdf-overlay';
+  overlay.style.cssText = [
+    'position:fixed','inset:0',
+    'background:rgba(10,18,14,.92)',
+    'z-index:99999',
+    'display:flex','align-items:center','justify-content:center',
+    'font-family:system-ui,Arial,sans-serif'
+  ].join(';');
+  overlay.innerHTML = `
+    <div style="background:#fff;color:#1A1A17;padding:22px 30px;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;align-items:center;gap:14px;font-size:14px;font-weight:500">
+      <div style="width:22px;height:22px;border:3px solid #E5E3DC;border-top-color:#0F7A62;border-radius:50%;animation:spin .9s linear infinite"></div>
+      Generando PDF, un momento…
+    </div>`;
 
-  // Contenedor temporal VISIBLE para html2canvas (oculto con opacity, no left:-9999)
-  // html2canvas no captura bien elementos posicionados fuera del viewport.
+  // 2) Contenedor del HTML del formato — VISIBLE en el DOM (clave para html2canvas)
+  //    pero tapado por el overlay que está encima.
   const wrap = document.createElement('div');
+  wrap.id = 'pdf-wrap';
   wrap.style.cssText = [
-    'position:fixed',
-    'top:0',
-    'left:0',
-    'width:794px',          // ~A4 width @96dpi
+    'position:fixed','top:0','left:0',
+    'width:794px',                  // ~A4 a 96 dpi
     'background:#ffffff',
     'padding:24px',
-    'z-index:-1',
-    'opacity:0',            // invisible al ojo
-    'pointer-events:none',
-    'overflow:visible'
+    'z-index:1',                    // muy debajo del overlay
+    'box-sizing:border-box'
   ].join(';');
   wrap.innerHTML = buildPDFHTML(f);
-  document.body.appendChild(wrap);
 
-  // Esperamos un tick a que el navegador haga layout
-  await new Promise(r => setTimeout(r, 80));
+  // Importante: AGREGAR primero el wrap, después el overlay encima
+  document.body.appendChild(wrap);
+  document.body.appendChild(overlay);
+
+  // Esperamos a que el navegador termine el layout + carga de fuentes
+  await new Promise(r => setTimeout(r, 250));
+  if (document.fonts && document.fonts.ready) {
+    try { await document.fonts.ready; } catch(e) {}
+  }
 
   const procStr = (f.proceso || 'formato').replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]+/g, '').replace(/\s+/g, '_');
   const yr = f.year || ((f.years && f.years[0]) || selYear);
@@ -563,7 +580,7 @@ async function downloadFormPDF(formId){
         useCORS: true,
         backgroundColor: '#ffffff',
         scrollX: 0,
-        scrollY: 0,
+        scrollY: -window.scrollY,
         windowWidth: 794,
         logging: false
       },
@@ -573,9 +590,10 @@ async function downloadFormPDF(formId){
     showToast('✓ PDF descargado');
   } catch (e) {
     console.error('Error generando PDF:', e);
-    showToast('❌ Error generando PDF');
+    showToast('❌ Error generando PDF · revisa la consola');
   } finally {
     if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
   }
 }
 
