@@ -518,83 +518,76 @@ function buildPDFHTML(f){
   `;
 }
 
-async function downloadFormPDF(formId){
+function downloadFormPDF(formId){
   const f = DB.forms[formId];
   if (!f) { showToast('❌ Formato no encontrado'); return; }
-  if (typeof html2pdf === 'undefined') {
-    showToast('La librería de PDF aún se está cargando, intenta de nuevo en 2 segundos.');
-    return;
-  }
-
-  // 1) Overlay opaco con spinner — TAPA visualmente al usuario el render del PDF
-  const overlay = document.createElement('div');
-  overlay.id = 'pdf-overlay';
-  overlay.style.cssText = [
-    'position:fixed','inset:0',
-    'background:rgba(10,18,14,.92)',
-    'z-index:99999',
-    'display:flex','align-items:center','justify-content:center',
-    'font-family:system-ui,Arial,sans-serif'
-  ].join(';');
-  overlay.innerHTML = `
-    <div style="background:#fff;color:#1A1A17;padding:22px 30px;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;align-items:center;gap:14px;font-size:14px;font-weight:500">
-      <div style="width:22px;height:22px;border:3px solid #E5E3DC;border-top-color:#0F7A62;border-radius:50%;animation:spin .9s linear infinite"></div>
-      Generando PDF, un momento…
-    </div>`;
-
-  // 2) Contenedor del HTML del formato — VISIBLE en el DOM (clave para html2canvas)
-  //    pero tapado por el overlay que está encima.
-  const wrap = document.createElement('div');
-  wrap.id = 'pdf-wrap';
-  wrap.style.cssText = [
-    'position:fixed','top:0','left:0',
-    'width:794px',                  // ~A4 a 96 dpi
-    'background:#ffffff',
-    'padding:24px',
-    'z-index:1',                    // muy debajo del overlay
-    'box-sizing:border-box'
-  ].join(';');
-  wrap.innerHTML = buildPDFHTML(f);
-
-  // Importante: AGREGAR primero el wrap, después el overlay encima
-  document.body.appendChild(wrap);
-  document.body.appendChild(overlay);
-
-  // Esperamos a que el navegador termine el layout + carga de fuentes
-  await new Promise(r => setTimeout(r, 250));
-  if (document.fonts && document.fonts.ready) {
-    try { await document.fonts.ready; } catch(e) {}
-  }
 
   const procStr = (f.proceso || 'formato').replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]+/g, '').replace(/\s+/g, '_');
   const yr = f.year || ((f.years && f.years[0]) || selYear);
-  const fileName = `COMPASS_${procStr}_${yr}.pdf`;
+  const title = `COMPASS_${procStr}_${yr}`;
+  const inner = buildPDFHTML(f);
 
-  try {
-    await html2pdf().set({
-      margin:       [10, 10, 12, 10],
-      filename:     fileName,
-      image:        { type: 'jpeg', quality: 0.95 },
-      html2canvas:  {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        scrollX: 0,
-        scrollY: -window.scrollY,
-        windowWidth: 794,
-        logging: false
-      },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-    }).from(wrap).save();
-    showToast('✓ PDF descargado');
-  } catch (e) {
-    console.error('Error generando PDF:', e);
-    showToast('❌ Error generando PDF · revisa la consola');
-  } finally {
-    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
-    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  // Estrategia nativa: ventana nueva con el HTML + window.print()
+  // El usuario elige "Guardar como PDF" en el diálogo del navegador.
+  // 100% confiable, sin depender de html2canvas.
+  const docHTML = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm 10mm 12mm 10mm; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1A1A17; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print {
+    .no-print { display: none !important; }
   }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    background: #0A120E; color: #fff;
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  }
+  .toolbar-title { font-weight: 600; font-size: 14px; }
+  .toolbar-actions { display: flex; gap: 8px; }
+  .tb-btn {
+    background: #0F7A62; color: #fff; border: none;
+    padding: 8px 18px; border-radius: 6px; font-weight: 600; font-size: 13px;
+    cursor: pointer; transition: background .15s;
+  }
+  .tb-btn:hover { background: #14957A; }
+  .tb-btn.alt { background: transparent; border: 1px solid rgba(255,255,255,.3); }
+  .tb-btn.alt:hover { background: rgba(255,255,255,.1); }
+  .doc-pad { padding: 24px; max-width: 794px; margin: 0 auto; }
+</style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <div class="toolbar-title">📄 ${title}.pdf</div>
+    <div class="toolbar-actions">
+      <button class="tb-btn alt" onclick="window.close()">Cerrar</button>
+      <button class="tb-btn" onclick="window.print()">📥 Descargar / Imprimir PDF</button>
+    </div>
+  </div>
+  <div class="doc-pad">${inner}</div>
+  <script>
+    // Auto-disparar el diálogo de impresión apenas carga la página
+    window.addEventListener('load', () => {
+      setTimeout(() => { window.focus(); window.print(); }, 350);
+    });
+  <\/script>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=900');
+  if (!w) {
+    showToast('❌ Tu navegador bloqueó la ventana — permite popups para este sitio');
+    return;
+  }
+  w.document.open();
+  w.document.write(docHTML);
+  w.document.close();
+  showToast('📄 Abriendo vista previa de PDF…');
 }
 
 /* ════════════════════════════════════════
