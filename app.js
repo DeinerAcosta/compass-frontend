@@ -537,45 +537,52 @@ function downloadFormPDF(formId){
 <title>${title}</title>
 <style>
   @page { size: A4 portrait; margin: 10mm 10mm 12mm 10mm; }
-  html, body { margin: 0; padding: 0; background: #ffffff; }
+  html, body { margin: 0; padding: 0; background: #F4F3F0; }
   body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1A1A17; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @media print {
     .no-print { display: none !important; }
+    html, body { background: #fff; }
+    .doc-pad { padding: 0; max-width: none; box-shadow: none; }
   }
   .toolbar {
     position: sticky; top: 0; z-index: 10;
     background: #0A120E; color: #fff;
     padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
     box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    gap: 16px;
   }
+  .toolbar-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .toolbar-title { font-weight: 600; font-size: 14px; }
-  .toolbar-actions { display: flex; gap: 8px; }
+  .toolbar-hint { font-size: 11px; opacity: .7; }
+  .toolbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .tb-btn {
     background: #0F7A62; color: #fff; border: none;
-    padding: 8px 18px; border-radius: 6px; font-weight: 600; font-size: 13px;
-    cursor: pointer; transition: background .15s;
+    padding: 9px 18px; border-radius: 6px; font-weight: 600; font-size: 13px;
+    cursor: pointer; transition: background .15s; white-space: nowrap;
   }
   .tb-btn:hover { background: #14957A; }
   .tb-btn.alt { background: transparent; border: 1px solid rgba(255,255,255,.3); }
   .tb-btn.alt:hover { background: rgba(255,255,255,.1); }
-  .doc-pad { padding: 24px; max-width: 794px; margin: 0 auto; }
+  .doc-pad {
+    padding: 30px 24px;
+    max-width: 794px; margin: 0 auto;
+    background: #fff;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+  }
 </style>
 </head>
 <body>
   <div class="toolbar no-print">
-    <div class="toolbar-title">📄 ${title}.pdf</div>
+    <div class="toolbar-left">
+      <div class="toolbar-title">📄 ${title}.pdf</div>
+      <div class="toolbar-hint">Revisa la vista previa, luego clic en "Descargar PDF" y elige "Guardar como PDF" en Destino</div>
+    </div>
     <div class="toolbar-actions">
       <button class="tb-btn alt" onclick="window.close()">Cerrar</button>
-      <button class="tb-btn" onclick="window.print()">📥 Descargar / Imprimir PDF</button>
+      <button class="tb-btn" onclick="window.print()">📥 Descargar PDF</button>
     </div>
   </div>
   <div class="doc-pad">${inner}</div>
-  <script>
-    // Auto-disparar el diálogo de impresión apenas carga la página
-    window.addEventListener('load', () => {
-      setTimeout(() => { window.focus(); window.print(); }, 350);
-    });
-  <\/script>
 </body>
 </html>`;
 
