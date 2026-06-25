@@ -350,6 +350,213 @@ function render(){
 }
 
 /* ════════════════════════════════════════
+   EXPORTACIÓN PDF (cliente, html2pdf.js)
+════════════════════════════════════════ */
+function buildPDFHTML(f){
+  const yr1 = (f.years && f.years[0]) || f.year || selYear;
+  const yr2 = (f.years && f.years[1]) || (yr1 + 1);
+  const items = (f.mpaItems && f.mpaItems.length) ? f.mpaItems :
+                [{meta26:f.meta26, accion26:f.accion26, meta27:f.meta27, accion27:f.accion27}];
+  const kpis = (f.kpis || []).filter(k => k.ind);
+  const bscList = (f.bsc || []).map(c => {
+    const obj = BSC.find(b => b.code === c);
+    return obj ? `<span style="display:inline-block;background:${obj.bg};color:${obj.color};border:1px solid ${obj.color}33;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:600;margin:2px 4px 2px 0">${obj.code} · ${obj.label}</span>` : '';
+  }).join('');
+
+  const semColor = s => s === 'verde' ? '#10B981' : s === 'amarillo' ? '#F59E0B' : s === 'rojo' ? '#DC2626' : '#9CA3AF';
+  const semText  = s => s === 'verde' ? 'Verde' : s === 'amarillo' ? 'Amarillo' : s === 'rojo' ? 'Rojo' : '—';
+  const statusLabel = f.status === 'enviado' ? 'Enviado'
+                    : f.status === 'Edicion Solicitada' ? 'Edición solicitada'
+                    : 'Borrador';
+  const statusColor = f.status === 'enviado' ? '#0F7A62'
+                    : f.status === 'Edicion Solicitada' ? '#D97706'
+                    : '#6B7280';
+  const today = new Date().toLocaleDateString('es-CO', {day:'2-digit',month:'long',year:'numeric'});
+
+  // Estilos INLINE — html2pdf no hereda estilos del CSS principal de forma confiable
+  return `
+  <div style="font-family: 'Helvetica', 'Arial', sans-serif; color: #1A1A17; padding: 0; max-width: 760px; margin: 0 auto; background: #fff;">
+
+    <!-- HEADER -->
+    <div style="background: linear-gradient(135deg, #0F7A62 0%, #14957A 100%); color: #fff; padding: 22px 28px; border-radius: 6px 6px 0 0;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <div style="font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: .85; margin-bottom: 4px;">Clínica Oftalmológica Internacional</div>
+          <div style="font-family: Georgia, serif; font-size: 26px; font-weight: 600; letter-spacing: -.5px;">COMPASS</div>
+          <div style="font-size: 12px; opacity: .85; margin-top: 2px;">Formato de Planeación Operativa</div>
+        </div>
+        <div style="text-align: right; font-size: 11px; opacity: .9;">
+          <div style="background: rgba(255,255,255,.18); padding: 6px 12px; border-radius: 4px; font-weight: 600; margin-bottom: 4px;">Período ${yr1}${yr2 && yr2 !== yr1 ? ' — ' + yr2 : ''}</div>
+          <div>Generado: ${today}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLOQUE DE IDENTIFICACIÓN -->
+    <table style="width: 100%; border-collapse: collapse; margin-top: 0; font-size: 11px;">
+      <tr>
+        <td style="padding: 10px 14px; background: #F4F3F0; border-bottom: 1px solid #E5E3DC; width: 28%; font-weight: 600; color: #4A4841;">Proceso</td>
+        <td style="padding: 10px 14px; background: #FAFAF9; border-bottom: 1px solid #E5E3DC;">${esc(f.proceso) || '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 14px; background: #F4F3F0; border-bottom: 1px solid #E5E3DC; font-weight: 600; color: #4A4841;">Líder responsable</td>
+        <td style="padding: 10px 14px; background: #FAFAF9; border-bottom: 1px solid #E5E3DC;">${esc(f.lider) || '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 14px; background: #F4F3F0; border-bottom: 1px solid #E5E3DC; font-weight: 600; color: #4A4841;">Mercado</td>
+        <td style="padding: 10px 14px; background: #FAFAF9; border-bottom: 1px solid #E5E3DC;">${esc(f.mercado) || '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 14px; background: #F4F3F0; font-weight: 600; color: #4A4841;">Estado</td>
+        <td style="padding: 10px 14px; background: #FAFAF9;"><span style="display:inline-block;background:${statusColor}1A;color:${statusColor};padding:3px 10px;border-radius:4px;font-size:10px;font-weight:600">${statusLabel}</span></td>
+      </tr>
+    </table>
+
+    <!-- C — CONTEXTO -->
+    <div style="margin-top: 22px;">
+      <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 600; color: #0F7A62; border-bottom: 2px solid #0F7A62; padding-bottom: 4px; margin-bottom: 8px;">C · Contexto actual</div>
+      <div style="font-size: 11px; line-height: 1.55; color: #2A2A27; padding: 4px 0;">${esc(f.contexto) || '<em style="color:#8A8780">Sin contexto definido.</em>'}</div>
+    </div>
+
+    <!-- O — OBJETIVO -->
+    <div style="margin-top: 18px;">
+      <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 600; color: #1252A3; border-bottom: 2px solid #1252A3; padding-bottom: 4px; margin-bottom: 8px;">O · Objetivo estratégico (BSC)</div>
+      <div style="margin-bottom: 8px;">${bscList || '<em style="font-size:11px;color:#8A8780">Sin objetivos BSC seleccionados.</em>'}</div>
+      <div style="font-size: 11px; line-height: 1.55; color: #2A2A27;">${esc(f.objetivo) || '<em style="color:#8A8780">Sin descripción del objetivo.</em>'}</div>
+    </div>
+
+    <!-- M+P+A — COMPROMISOS -->
+    <div style="margin-top: 18px; page-break-inside: avoid;">
+      <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 600; color: #2A3D2D; border-bottom: 2px solid #2A3D2D; padding-bottom: 4px; margin-bottom: 10px;">M · P · A · Compromisos y proyección</div>
+      ${items.map((it, idx) => `
+        <div style="background: #FAFAF9; border: 1px solid #E5E3DC; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; page-break-inside: avoid;">
+          ${items.length > 1 ? `<div style="font-size:10px;font-weight:700;color:#8A8780;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Compromiso ${idx+1}</div>` : ''}
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="vertical-align: top; width: 50%; padding-right: 8px; border-right: 1px solid #E5E3DC;">
+                <div style="background:#0F7A62;color:#fff;display:inline-block;padding:2px 8px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:.5px;margin-bottom:6px">◆ ${yr1}</div>
+                <div style="margin-bottom: 8px;">
+                  <div style="font-size: 9px; font-weight: 700; color: #4A4841; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px;">M — Meta</div>
+                  <div style="font-size: 11px; line-height: 1.5;">${esc(it.meta26) || '—'}</div>
+                </div>
+                ${it.accion26 ? `<div>
+                  <div style="font-size: 9px; font-weight: 700; color: #4A4841; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px;">A — Acción palanca</div>
+                  <div style="font-size: 11px; line-height: 1.5;">${esc(it.accion26)}</div>
+                </div>` : ''}
+              </td>
+              <td style="vertical-align: top; width: 50%; padding-left: 12px;">
+                <div style="background:#1252A3;color:#fff;display:inline-block;padding:2px 8px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:.5px;margin-bottom:6px">◇ ${yr2}</div>
+                <div style="margin-bottom: 8px;">
+                  <div style="font-size: 9px; font-weight: 700; color: #4A4841; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px;">P — Meta proyectada</div>
+                  <div style="font-size: 11px; line-height: 1.5;">${esc(it.meta27) || '—'}</div>
+                </div>
+                ${it.accion27 ? `<div>
+                  <div style="font-size: 9px; font-weight: 700; color: #4A4841; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px;">A — Acción palanca</div>
+                  <div style="font-size: 11px; line-height: 1.5;">${esc(it.accion27)}</div>
+                </div>` : ''}
+              </td>
+            </tr>
+          </table>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- S — KPIs -->
+    <div style="margin-top: 18px; page-break-inside: avoid;">
+      <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 600; color: #9A5C0A; border-bottom: 2px solid #9A5C0A; padding-bottom: 4px; margin-bottom: 8px;">S · Semáforo de KPIs</div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+        <thead>
+          <tr style="background: #F4F3F0;">
+            <th style="padding: 8px 10px; text-align: left; border: 1px solid #E5E3DC; font-weight: 700; color: #4A4841; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;">Indicador</th>
+            <th style="padding: 8px 10px; text-align: left; border: 1px solid #E5E3DC; font-weight: 700; color: #4A4841; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;">Línea base</th>
+            <th style="padding: 8px 10px; text-align: left; border: 1px solid #E5E3DC; font-weight: 700; color: #4A4841; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;">Meta ${yr1}</th>
+            <th style="padding: 8px 10px; text-align: left; border: 1px solid #E5E3DC; font-weight: 700; color: #4A4841; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;">Meta ${yr2}</th>
+            <th style="padding: 8px 10px; text-align: center; border: 1px solid #E5E3DC; font-weight: 700; color: #4A4841; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;">Semáforo</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${kpis.length ? kpis.map(k => `
+            <tr>
+              <td style="padding: 8px 10px; border: 1px solid #E5E3DC; font-weight: 600;">${esc(k.ind)}</td>
+              <td style="padding: 8px 10px; border: 1px solid #E5E3DC;">${esc(k.base) || '—'}</td>
+              <td style="padding: 8px 10px; border: 1px solid #E5E3DC; color: #0F7A62; font-weight: 600;">${esc(k.meta26) || '—'}</td>
+              <td style="padding: 8px 10px; border: 1px solid #E5E3DC; color: #1252A3; font-weight: 600;">${esc(k.meta27) || '—'}</td>
+              <td style="padding: 8px 10px; border: 1px solid #E5E3DC; text-align: center;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${semColor(k.sem)};margin-right:4px;vertical-align:middle"></span>
+                <span style="font-weight:600;color:${semColor(k.sem)};vertical-align:middle">${semText(k.sem)}</span>
+              </td>
+            </tr>
+          `).join('') : `<tr><td colspan="5" style="padding: 14px; text-align: center; border: 1px solid #E5E3DC; color: #8A8780; font-style: italic;">Sin KPIs definidos</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- S — SUPUESTO + APOYO -->
+    <div style="margin-top: 18px; page-break-inside: avoid;">
+      <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 600; color: #9F1239; border-bottom: 2px solid #9F1239; padding-bottom: 4px; margin-bottom: 8px;">S · Supuesto crítico y apoyo requerido</div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+        <tr>
+          <td style="width: 50%; vertical-align: top; padding: 10px 12px; border: 1px solid #E5E3DC; background: #FFF1F2;">
+            <div style="font-size: 9px; font-weight: 700; color: #9F1239; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;">Supuesto crítico</div>
+            <div style="line-height: 1.5;">${esc(f.supuesto) || '<em style="color:#8A8780">Sin supuesto definido.</em>'}</div>
+          </td>
+          <td style="width: 50%; vertical-align: top; padding: 10px 12px; border: 1px solid #E5E3DC; background: #FAFAF9;">
+            <div style="font-size: 9px; font-weight: 700; color: #4A4841; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;">Apoyo requerido de Gerencia</div>
+            <div style="line-height: 1.5;">${esc(f.recurso) || '<em style="color:#8A8780">No se requiere apoyo específico.</em>'}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="margin-top: 26px; padding-top: 10px; border-top: 1px solid #E5E3DC; display: flex; justify-content: space-between; font-size: 9px; color: #8A8780;">
+      <div>COMPASS · Clínica Oftalmológica Internacional</div>
+      <div>Documento generado automáticamente · ${today}</div>
+    </div>
+
+  </div>
+  `;
+}
+
+async function downloadFormPDF(formId){
+  const f = DB.forms[formId];
+  if (!f) { showToast('❌ Formato no encontrado'); return; }
+  if (typeof html2pdf === 'undefined') {
+    showToast('La librería de PDF aún se está cargando, intenta de nuevo en 2 segundos.');
+    return;
+  }
+
+  showToast('📄 Generando PDF…');
+
+  // Contenedor temporal fuera de pantalla
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:760px;background:#fff;padding:24px;';
+  wrap.innerHTML = buildPDFHTML(f);
+  document.body.appendChild(wrap);
+
+  const procStr = (f.proceso || 'formato').replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]+/g, '').replace(/\s+/g, '_');
+  const yr = f.year || ((f.years && f.years[0]) || selYear);
+  const fileName = `COMPASS_${procStr}_${yr}.pdf`;
+
+  try {
+    await html2pdf().set({
+      margin:       [10, 10, 12, 10],   // top, left, bottom, right (mm)
+      filename:     fileName,
+      image:        { type: 'jpeg', quality: 0.95 },
+      html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+    }).from(wrap).save();
+    showToast('✓ PDF descargado');
+  } catch (e) {
+    console.error(e);
+    showToast('❌ Error generando PDF');
+  } finally {
+    document.body.removeChild(wrap);
+  }
+}
+
+/* ════════════════════════════════════════
    API ACTIONS (Admin Delete & Status)
 ════════════════════════════════════════ */
 async function deleteFormComplete(formId) {
@@ -773,9 +980,14 @@ function renderDetail(f){
   const yr=f.year||selYear;
 
   // Renderizar la botonera inteligente según el ROL y el ESTADO
+  // El botón Descargar PDF está disponible para TODOS los roles (owner, admin, viewer)
+  const canDownload = (CU.role === 'admin' || CU.role === 'viewer' || isOwner);
   let actionBtns = '';
+  if (canDownload) {
+      actionBtns += `<button class="btn btn-outline btn-sm" onclick="downloadFormPDF('${f.id}')" title="Descargar formato en PDF">📥 Descargar PDF</button>`;
+  }
   if (CU.role === 'viewer') {
-      // Revisor: solo lectura, sin botones de acción
+      // Revisor: solo lectura, sin botones de acción (excepto descargar PDF arriba)
       actionBtns += `<span style="font-size:12px;color:#1252A3;font-weight:bold;background:#EFF6FF;padding:6px 12px;border-radius:6px">👁️ Modo revisión (solo lectura)</span>`;
   } else if (CU.role === 'admin') {
       actionBtns += `<button class="btn btn-outline btn-sm" onclick="startEdit('${f.id}')">✏️ Editar como Admin</button>`;
